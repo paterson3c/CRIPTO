@@ -35,7 +35,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 
 # Limpiar
 clean:
-	rm -rf $(OBJ_DIR) $(BIN_AFIN) $(BIN_EUC)
+	rm -rf $(OBJ_DIR) $(BIN_AFIN) $(BIN_EUC) *enc *_dec.txt
 
 # Recompilar todo
 rebuild: clean all
