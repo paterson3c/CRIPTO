@@ -1,5 +1,8 @@
+#include <stdio.h>
+#include <gmp.h>
+
 #define CIPHER_AFIN 1
 #define DECIPHER_AFIN 0
 
-void encrypt(int m, int a, int b, FILE *in, FILE *out);
-void decrypt(int m, int a, int b, FILE *in, FILE *out);
+void encriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz_t m);
+void decriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz_t m);

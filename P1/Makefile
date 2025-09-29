@@ -6,27 +6,36 @@ LDFLAGS:= -lgmp
 # Directorios
 SRC_DIR := ./src
 OBJ_DIR := ./obj
-BIN     := ./main
+BIN_AFIN := ./afin
+BIN_EUC  := ./euclides
 
-# Archivos
-SRC := $(SRC_DIR)/euclides.c
-OBJ := $(OBJ_DIR)/euclides.o
+# Fuentes
+SRC_AFIN := $(SRC_DIR)/afin.c $(SRC_DIR)/euclides.c
+SRC_EUC  := $(SRC_DIR)/euclides.c
 
-# Regla por defecto
-all: $(BIN)
+# Objetos
+OBJ_AFIN := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_AFIN))
+OBJ_EUC  := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_EUC))
 
-# Compilar ejecutable
-$(BIN): $(OBJ)
-	$(CC) $(OBJ) $(LDFLAGS) -o $@
+# Regla por defecto: compilar ambos ejecutables
+all: $(BIN_AFIN) #$(BIN_EUC)
 
-# Compilar objeto
+# Ejecutable afin
+$(BIN_AFIN): $(OBJ_AFIN)
+	$(CC) $(OBJ_AFIN) $(LDFLAGS) -o $@
+
+# Ejecutable euclides
+#$(BIN_EUC): $(OBJ_EUC)
+#	$(CC) $(OBJ_EUC) $(LDFLAGS) -o $@
+
+# Compilar cada .c en su .o
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Limpiar objetos y binario
+# Limpiar
 clean:
-	rm -rf $(OBJ_DIR) $(BIN)
+	rm -rf $(OBJ_DIR) $(BIN_AFIN) $(BIN_EUC)
 
-# Forzar recompilación
+# Recompilar todo
 rebuild: clean all

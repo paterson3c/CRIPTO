@@ -3,18 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-struct _EuclidesResult{
-    mpz_t *q;   /*array cocientes*/
-    mpz_t rn;   /*ultimo resto*/
-    int n;      /*num cocientes validos*/
-};
-
-struct _ExtendedEuclidesResult{
-    mpz_t s;   /*coeficiente bezout a*/
-    mpz_t t;   /*coeficiente bezout b*/
-    mpz_t mcd; /*mcd*/
-};
-
 EuclidesResult euclides(const mpz_t a, const mpz_t b) {
     EuclidesResult res;
     res.q = NULL;
@@ -142,7 +130,7 @@ ExtendedEuclidesResult extended_euclides(const mpz_t a, const mpz_t b) {
     return res;
 }
 
-int main(void) {
+/**int main(void) {
     mpz_t a, b, lhs;
     mpz_inits(a, b, lhs, NULL);
 
@@ -174,4 +162,4 @@ int main(void) {
     mpz_clears(res.mcd, res.s, res.t, NULL);
 
     return 0;
-}
+}**/
