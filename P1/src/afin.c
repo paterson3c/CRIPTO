@@ -1,12 +1,10 @@
 #include "afin.h"
+#include "euclides.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <gmp.h>
 #include <string.h>
 
-void encrypt(int m, int a, int b, FILE *in, FILE *out) {
-
-}
+void encrypt(int m, int a, int b, FILE *in, FILE *out);
 void decrypt(int m, int a, int b, FILE *in, FILE *out);
 
 /**
