@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.rmd": "markdown",
+        ".env*": "dotenv",
+        "stdlib.h": "c"
+    }
+}
