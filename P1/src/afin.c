@@ -30,6 +30,14 @@ void encriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz
     mpz_t x, y;
     mpz_inits(x, y, NULL);
 
+    // 1) Inverso modular de a mod m usando Euclides extendido
+    ExtendedEuclidesResult ext = extended_euclides(a, m);
+    if (mpz_cmp_ui(ext.mcd, 1) != 0) {
+        fprintf(stderr, "Error: a y m no son coprimos (mcd != 1); no existe inverso modular.\n");
+        mpz_clears(ext.mcd, ext.s, ext.t, NULL);
+        return;
+    }
+
     while ((c = fgetc(in)) != EOF) {
         // Convertir carácter a número x
         mpz_set_ui(x, (unsigned char)c);
