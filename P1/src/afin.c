@@ -30,25 +30,25 @@ void encriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz
     mpz_t x, y;
     mpz_inits(x, y, NULL);
 
-    // 1) Inverso modular de a mod m usando Euclides extendido
-    ExtendedEuclidesResult ext = extended_euclides(a, m);
-    if (mpz_cmp_ui(ext.mcd, 1) != 0) {
-        fprintf(stderr, "Error: a y m no son coprimos (mcd != 1); no existe inverso modular.\n");
-        mpz_clears(ext.mcd, ext.s, ext.t, NULL);
-        return;
-    }
-
     while ((c = fgetc(in)) != EOF) {
-        // Convertir carácter a número x
-        mpz_set_ui(x, (unsigned char)c);
+        // convertir a mayúscula
+        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
 
-        // y = (a*x + b) mod m
-        mpz_mul(y, a, x);      // y = a*x
-        mpz_add(y, y, b);      // y = y + b
-        mpz_mod(y, y, m);      // y = y mod m
+        // solo letras A-Z
+        if (c < 'A' || c > 'Z') continue;
 
-        // Escribir resultado como byte
-        fputc((unsigned char)mpz_get_ui(y), out);
+        // mapear A=0 ... Z=25
+        int idx = c - 'A';
+
+        // y = (a*x + b) mod 26
+        mpz_set_ui(x, idx);
+        mpz_mul(y, a, x);
+        mpz_add(y, y, b);
+        mpz_mod(y, y, m);   // m=26 fijo
+
+        // volver a letra
+        int out_c = (int)mpz_get_ui(y) + 'A';
+        fputc(out_c, out);
     }
 
     mpz_clears(x, y, NULL);
@@ -92,17 +92,21 @@ void decriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz
     mpz_inits(y, tmp, x, NULL);
 
     while ((c = fgetc(in)) != EOF) {
-        mpz_set_ui(y, (unsigned char)c);  // y = byte cifrado
-
-        // tmp = (y - b) mod m   (asegurando no-negativo)
+        if (c < 'A' || c > 'Z') continue; // ignorar todo lo que no sea letra
+        
+        int idx = c - 'A';
+        mpz_set_ui(y, idx);
+        
+        // tmp = (y - b) mod m
         mpz_sub(tmp, y, b);
         mpz_mod(tmp, tmp, m);
-
-        // x = (ainv * tmp) mod m
+        
+        // x = ainv * tmp mod m
         mpz_mul(x, ainv, tmp);
         mpz_mod(x, x, m);
-
-        fputc((unsigned char)mpz_get_ui(x), out);
+        
+        int out_c = (int)mpz_get_ui(x) + 'A';
+        fputc(out_c, out);
     }
 
     // 3) Limpieza
