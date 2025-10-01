@@ -5,6 +5,57 @@
 #include <string.h>
 
 /**
+ * @brief Normaliza un carácter al alfabeto A–Z (m=26).
+ * Convierte tildes y diéresis en su vocal base,
+ * convierte ñ/Ñ en N y descarta lo que no sea A–Z.
+ *
+ * @param c Carácter de entrada.
+ * @return Carácter normalizado en A–Z o 0 si no es válido.
+ */
+char normalizar_char(int c) {
+    if (c >= 'a' && c <= 'z') {
+        c = c - 'a' + 'A';
+    }
+
+    switch (c) {
+        case 'Á': case 'á': return 'A';
+        case 'À': case 'à': return 'A';
+        case 'Â': case 'â': return 'A';
+        case 'Ä': case 'ä': return 'A';
+
+        case 'É': case 'é': return 'E';
+        case 'È': case 'è': return 'E';
+        case 'Ê': case 'ê': return 'E';
+        case 'Ë': case 'ë': return 'E';
+
+        case 'Í': case 'í': return 'I';
+        case 'Ì': case 'ì': return 'I';
+        case 'Î': case 'î': return 'I';
+        case 'Ï': case 'ï': return 'I';
+
+        case 'Ó': case 'ó': return 'O';
+        case 'Ò': case 'ò': return 'O';
+        case 'Ô': case 'ô': return 'O';
+        case 'Ö': case 'ö': return 'O';
+
+        case 'Ú': case 'ú': return 'U';
+        case 'Ù': case 'ù': return 'U';
+        case 'Û': case 'û': return 'U';
+        case 'Ü': case 'ü': return 'U';
+
+        case 'Ñ': case 'ñ': return 'N';
+
+        default: break;
+    }
+
+    if (c >= 'A' && c <= 'Z') {
+        return (char)c;
+    }
+
+    return 0;
+}
+
+/**
  * @brief Encripta un archivo usando el cifrado afín.
  *
  * Fórmula de cifrado: E(x) = (a*x + b) mod m
@@ -31,11 +82,9 @@ void encriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz
     mpz_inits(x, y, NULL);
 
     while ((c = fgetc(in)) != EOF) {
-        // convertir a mayúscula
-        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
-
-        // solo letras A-Z
-        if (c < 'A' || c > 'Z') continue;
+        c = normalizar_char(c);
+        if (c == 0) 
+            continue;
 
         // mapear A=0 ... Z=25
         int idx = c - 'A';
@@ -93,18 +142,18 @@ void decriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz
 
     while ((c = fgetc(in)) != EOF) {
         if (c < 'A' || c > 'Z') continue; // ignorar todo lo que no sea letra
-        
+
         int idx = c - 'A';
         mpz_set_ui(y, idx);
-        
+
         // tmp = (y - b) mod m
         mpz_sub(tmp, y, b);
         mpz_mod(tmp, tmp, m);
-        
+
         // x = ainv * tmp mod m
         mpz_mul(x, ainv, tmp);
         mpz_mod(x, x, m);
-        
+
         int out_c = (int)mpz_get_ui(x) + 'A';
         fputc(out_c, out);
     }
