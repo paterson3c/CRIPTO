@@ -12,46 +12,39 @@
  * @param c Carácter de entrada.
  * @return Carácter normalizado en A–Z o 0 si no es válido.
  */
-char normalizar_char(int c) {
-    if (c >= 'a' && c <= 'z') {
-        c = c - 'a' + 'A';
+char normalizar_char(FILE *in) {
+    int c = fgetc(in);
+    if (c == EOF) return EOF;
+
+    // ASCII simple
+    if (c >= 'a' && c <= 'z') return c - 'a' + 'A';
+    if (c >= 'A' && c <= 'Z') return c;
+
+    // UTF-8: caracteres multibyte (empezando por 0xC3)
+    if (c == 0xC3) {
+        int next = fgetc(in);
+        if (next == EOF) return EOF;
+        switch (next) {
+            // Vocales mayúsculas
+            case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: return 'A'; // ÀÁÂÃÄ
+            case 0x88: case 0x89: case 0x8A: case 0x8B: return 'E';             // ÈÉÊË
+            case 0x8C: case 0x8D: case 0x8E: case 0x8F: return 'I';             // ÌÍÎÏ
+            case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: return 'O'; // ÒÓÔÕÖ
+            case 0x99: case 0x9A: case 0x9B: case 0x9C: return 'U';             // ÙÚÛÜ
+            case 0x91: return 'N';                                              // Ñ
+
+            // Vocales minúsculas
+            case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: return 'A'; // àáâãä
+            case 0xA8: case 0xA9: case 0xAA: case 0xAB: return 'E';             // èéêë
+            case 0xAC: case 0xAD: case 0xAE: case 0xAF: return 'I';             // ìíîï
+            case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: return 'O'; // òóôõö
+            case 0xB9: case 0xBA: case 0xBB: case 0xBC: return 'U';             // ùúûü
+            case 0xB1: return 'N';                                              // ñ
+            default: return 0;
+        }
     }
 
-    switch (c) {
-        case 'Á': case 'á': return 'A';
-        case 'À': case 'à': return 'A';
-        case 'Â': case 'â': return 'A';
-        case 'Ä': case 'ä': return 'A';
-
-        case 'É': case 'é': return 'E';
-        case 'È': case 'è': return 'E';
-        case 'Ê': case 'ê': return 'E';
-        case 'Ë': case 'ë': return 'E';
-
-        case 'Í': case 'í': return 'I';
-        case 'Ì': case 'ì': return 'I';
-        case 'Î': case 'î': return 'I';
-        case 'Ï': case 'ï': return 'I';
-
-        case 'Ó': case 'ó': return 'O';
-        case 'Ò': case 'ò': return 'O';
-        case 'Ô': case 'ô': return 'O';
-        case 'Ö': case 'ö': return 'O';
-
-        case 'Ú': case 'ú': return 'U';
-        case 'Ù': case 'ù': return 'U';
-        case 'Û': case 'û': return 'U';
-        case 'Ü': case 'ü': return 'U';
-
-        case 'Ñ': case 'ñ': return 'N';
-
-        default: break;
-    }
-
-    if (c >= 'A' && c <= 'Z') {
-        return (char)c;
-    }
-
+    // Otros caracteres no válidos
     return 0;
 }
 
@@ -81,8 +74,7 @@ void encriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz
     mpz_t x, y;
     mpz_inits(x, y, NULL);
 
-    while ((c = fgetc(in)) != EOF) {
-        c = normalizar_char(c);
+    while ((c = normalizar_char(in)) != EOF) {
         if (c == 0) 
             continue;
 
