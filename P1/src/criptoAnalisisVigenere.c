@@ -7,7 +7,6 @@
 #define MAX_TEXT 1000000
 #define ALPHABET 26
 #define A 'A'
-#define TAM 500
 
 // Función para limpiar el texto (solo A-Z)
 int load_text(const char *filename, char *buffer) {
@@ -45,37 +44,109 @@ int mcd_array(int *arr, int n) {
     return resultado;
 }
 
-// Test de Kasiski: busca repeticiones de trigramas y distancias
+#define MAX_K_CAND 30   // probamos tamaños de clave 2..30 (ajústalo si quieres más)
+
+// Trigrama codificado + posición para ordenar y agrupar
+typedef struct {
+    int key;  // (A*26 + B)*26 + C
+    int pos;  // índice en el texto
+} Trip;
+
+// Comparador para qsort: primero por key, luego por pos
+static int cmp_trip(const void *pa, const void *pb) {
+    const Trip *a = (const Trip*)pa, *b = (const Trip*)pb;
+    if (a->key != b->key) return (a->key < b->key) ? -1 : 1;
+    return (a->pos - b->pos);
+}
+
+// Codifica 3 letras A..Z en un entero [0, 26^3)
+static inline int enc3(char a, char b, char c) {
+    return ((a - A) * 26 + (b - A)) * 26 + (c - A);
+}
+
+// Kasiski robusto con histograma de divisores
 void kasiski(const char *text, int len) {
-    printf("=== Test de Kasiski ===\n");
-    int mcds[TAM];
-    int num_mcd=0;
-    for (int i = 0; i < len - 3; i++) {
-        char trig[4];
-        strncpy(trig, &text[i], 3);
-        trig[3] = '\0';
-        int num =0;
-        int distancias[TAM]; 
-        for (int j = i + 3; j < len - 3; j++) {
-            
-            if (strncmp(trig, &text[j], 3) == 0) {
-                printf("Repetición %s en %d y %d (distancia %d)\n", trig, i, j, j - i);
-                distancias[num] = j-i;
-                num++;
+    printf("=== Test de Kasiski (robusto) ===\n");
+
+    if (len < 6) {
+        printf("Texto demasiado corto para Kasiski.\n");
+        return;
+    }
+
+    // Construimos la lista de trigramas (clave + posición)
+    int ntrip = len - 2;
+    Trip *arr = (Trip*)malloc(sizeof(Trip) * ntrip);
+    if (!arr) { fprintf(stderr, "Sin memoria.\n"); return; }
+
+    for (int i = 0; i < ntrip; i++) {
+        arr[i].key = enc3(text[i], text[i+1], text[i+2]);
+        arr[i].pos = i;
+    }
+
+    // Ordenamos por clave y posición para agrupar repeticiones
+    qsort(arr, ntrip, sizeof(Trip), cmp_trip);
+
+    // Histograma de divisores: votos para cada posible tamaño de clave
+    int votes[MAX_K_CAND + 1] = {0};
+
+    // Recorremos grupos de mismo trigrama
+    int i = 0;
+    while (i < ntrip) {
+        int j = i + 1;
+        while (j < ntrip && arr[j].key == arr[i].key) j++;
+
+        int group_sz = j - i;
+        if (group_sz >= 2) {
+            // Distancias entre apariciones consecutivas y MCD por trigrama
+            int g = 0;
+            for (int t = i + 1; t < j; t++) {
+                int d = arr[t].pos - arr[t - 1].pos;   // siempre >0
+                //Ignoramos distancias demasiado pequeñas para reducir ruido
+                if (d <= 40 || d >= len/2) continue;
+                // Acumulamos MCD del grupo
+                g = (g == 0) ? d : mcd(g, d);
+
+                // Votamos todos los divisores candidatos
+                for (int k = 2; k <= MAX_K_CAND; k++) {
+                    if (d % k == 0) votes[k]++;
+                }
             }
 
-            if(num>=2 && j>= len -4){
-                int mcd = mcd_array(distancias, num);
-                printf("La cadena %s se repite %d veces. MCD calculado: %d\n", trig, num, mcd);
-                mcds[num_mcd] = mcd;
-                num_mcd++;
-
+            // Mensaje informativo por grupo (solo si aporta algo)
+            if (g > 1) {
+                int p = arr[i].pos;
+                char trig[4] = { text[p], text[p+1], text[p+2], '\0' };
+                printf("Trigrama %s (repite %d veces) -> MCD grupo: %d\n", trig, group_sz, g);
             }
+        }
+
+        i = j;
+    }
+
+    free(arr);
+
+    // Elegimos el tamaño con más votos
+    int best_k = 0, best_votes = 0;
+    for (int k = 2; k <= MAX_K_CAND; k++) {
+        if (votes[k] > best_votes) {
+            best_votes = votes[k];
+            best_k = k;
         }
     }
 
-    int tam_clave = mcd_array(mcds, num_mcd);
-    printf("Tamaño de la clave: %d \n", tam_clave);
+    if (best_k == 0) {
+        printf("\nNo hay suficientes repeticiones significativas (o todas irrelevantes). "
+               "Prueba con otro n-grama (>3) o usa el IC.\n");
+        return;
+    }
+
+    // Mostramos el top de candidatos (opcional)
+    printf("\nVotos por candidato (2..%d):\n", MAX_K_CAND);
+    for (int k = 2; k <= MAX_K_CAND; k++) {
+        if (votes[k] > 0) printf("  %2d -> %d\n", k, votes[k]);
+    }
+
+    printf("\nEstimación longitud de la clave (Kasiski): %d (votos = %d)\n", best_k, best_votes);
 }
 
 // Índice de coincidencia para longitud n

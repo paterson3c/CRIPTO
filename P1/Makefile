@@ -16,23 +16,31 @@ FILES_DIR := ./files
 BIN_AFIN      := $(BIN_DIR)/afin
 BIN_AFIN_MOD  := $(BIN_DIR)/afin_mod
 BIN_EUC       := $(BIN_DIR)/euclides
+BIN_VIGENERE  := $(BIN_DIR)/vigenere
+BIN_CRIPTO_VIG := $(BIN_DIR)/criptoAnalisisVigenere
 
 # Fuentes
 SRC_AFIN      := $(SRC_DIR)/afin.c $(SRC_DIR)/euclides.c
 SRC_AFIN_MOD  := $(SRC_DIR)/afin_modificado.c $(SRC_DIR)/euclides.c
 SRC_EUC       := $(SRC_DIR)/euclides.c
+SRC_VIGENERE  := $(SRC_DIR)/vigenere.c
+SRC_CRIPTO_VIG := $(SRC_DIR)/criptoAnalisisVigenere.c
 
 # Objetos
 OBJ_AFIN      := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_AFIN))
 OBJ_AFIN_MOD  := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_AFIN_MOD))
 OBJ_EUC       := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_EUC))
+OBJ_VIGENERE  := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_VIGENERE))
+OBJ_CRIPTO_VIG := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_CRIPTO_VIG))
+
+# ===============================
 
 # ===============================
 #   REGLAS PRINCIPALES
 # ===============================
 
 # Por defecto compila todo
-all: $(BIN_AFIN) $(BIN_AFIN_MOD) #$(BIN_EUC)
+all: $(BIN_AFIN) $(BIN_AFIN_MOD) #$(BIN_EUC) $(BIN_VIGENERE) $(BIN_CRIPTO_VIG)
 
 # Ejecutable AFIN clásico
 $(BIN_AFIN): $(OBJ_AFIN)
@@ -51,6 +59,19 @@ $(BIN_AFIN_MOD): $(OBJ_AFIN_MOD)
 #	@mkdir -p $(BIN_DIR)
 #	$(CC) $(OBJ_EUC) $(LDFLAGS) -o $@
 #	@echo "[OK] Generado ejecutable $@"
+
+# Ejecutable VIGENERE
+$(BIN_VIGENERE): $(OBJ_VIGENERE)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(OBJ_VIGENERE) $(LDFLAGS) -o $@
+	@echo "[OK] Generado ejecutable $@"
+
+# Ejecutable CRIPTOANÁLISIS VIGENERE
+$(BIN_CRIPTO_VIG): $(OBJ_CRIPTO_VIG)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(OBJ_CRIPTO_VIG) $(LDFLAGS) -o $@
+	@echo "[OK] Generado ejecutable $@"
+
 
 # ===============================
 #   COMPILACIÓN INTERMEDIA
@@ -100,6 +121,31 @@ decrypt_mod:
 	@mkdir -p $(FILES_DIR)
 	$(BIN_AFIN_MOD) -D -m 26 -a 7 -b 13 -i $(FILES_DIR)/output_mod.enc -o $(FILES_DIR)/output_mod_dec.txt
 	@echo "[DONE] Archivo descifrado en $(FILES_DIR)/output_mod_dec.txt"
+
+# CRIFRADO VIGENERE
+encrypt_vigenere:
+	@mkdir -p $(FILES_DIR)
+	$(BIN_VIGENERE) -C -k CLAVE -i $(FILES_DIR)/quijote.txt -o $(FILES_DIR)/output_vig.enc
+	@echo "[DONE] Archivo cifrado en $(FILES_DIR)/output_vig.enc"
+
+# DESCRIFRADO VIGENERE
+
+decrypt_vigenere:
+	@mkdir -p $(FILES_DIR)
+	$(BIN_VIGENERE) -D -k CLAVE -i $(FILES_DIR)/output_vig.enc -o $(FILES_DIR)/output_vig_dec.txt
+	@echo "[DONE] Archivo descifrado en $(FILES_DIR)/output_vig_dec.txt"
+
+# CRIPTOANÁLISIS VIGENERE (test de Kasiski)
+analisis_vigenere_kasiski:
+	@mkdir -p $(FILES_DIR)
+	$(BIN_CRIPTO_VIG) -kasiski -i $(FILES_DIR)/output_vig.enc
+	@echo "[DONE] Análisis de texto cifrado completado"
+
+# CRIPTOANÁLISIS VIGENERE (índice de coincidencia)
+analisis_vigenere_ic:
+	@mkdir -p $(FILES_DIR)
+	$(BIN_CRIPTO_VIG) -ic 5 $(FILES_DIR)/output_vig.enc
+	@echo "[DONE] Análisis de texto cifrado completado"
 
 # ===============================
 #   VALGRIND TESTS
