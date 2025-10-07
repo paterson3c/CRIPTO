@@ -1,1 +1,12 @@
-.vscode/settings.json
+# Configuración local de VSCode
+.vscode/
+
+# Archivos compilados
+obj/
+bin/
+
+# Archivos temporales y de salida
+*.o
+*.enc
+*_dec.txt
+*.log
