@@ -61,6 +61,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 	@echo "[OK] Compilado $<"
 
+
 # ===============================
 #   LIMPIEZA
 # ===============================
@@ -92,13 +93,13 @@ decrypt_afin:
 # Cifrar con afin modificado (bloques)
 encrypt_afin_mod:
 	@mkdir -p $(FILES_DIR)
-	$(BIN_AFIN_MOD) -C -m 26 -a 7 -b 13 -i $(FILES_DIR)/input.txt -o $(FILES_DIR)/output_mod.enc
+	$(BIN_AFIN_MOD) -C -m 26 -a 36986419 7 -b 2776385085840833906571070249467114581 -i $(FILES_DIR)/quijote.txt -o $(FILES_DIR)/output_mod.enc
 	@echo "[DONE] Archivo cifrado en $(FILES_DIR)/output_mod.enc"
 
 # Descifrar con afin modificado (bloques)
-decrypt_mod:
+decrypt_afin_mod:
 	@mkdir -p $(FILES_DIR)
-	$(BIN_AFIN_MOD) -D -m 26 -a 7 -b 13 -i $(FILES_DIR)/output_mod.enc -o $(FILES_DIR)/output_mod_dec.txt
+	$(BIN_AFIN_MOD) -D -m 26 -a 36986419 7 -b 2776385085840833906571070249467114581 -i $(FILES_DIR)/output_mod.enc -o $(FILES_DIR)/output_mod_dec.txt
 	@echo "[DONE] Archivo descifrado en $(FILES_DIR)/output_mod_dec.txt"
 
 # ===============================
@@ -113,11 +114,16 @@ valgrind_encrypt_afin: $(BIN_AFIN)
 
 valgrind_encrypt_afin_mod: $(BIN_AFIN_MOD)
 	@echo "[VALGRIND] Comprobando fugas en AFIN MODIFICADO..."
-	$(VALGRIND) $(BIN_AFIN_MOD) -C -m 26 -a 7 -b 13 -i $(FILES_DIR)/quijote.txt -o $(FILES_DIR)/output_mod.enc
+	$(VALGRIND) $(BIN_AFIN_MOD) -C -m 26 -a 36986419 7 -b 2776385085840833906571070249467114581 -i $(FILES_DIR)/quijote.txt -o $(FILES_DIR)/output_mod.enc
 
 valgrind_decrypt_afin:
 	@echo "[VALGRIND] Comprobando fugas en AFIN..."
 	$(VALGRIND) $(BIN_AFIN) -D -m 26 -a 5 -b 8 -i $(FILES_DIR)/output.enc -o $(FILES_DIR)/output_dec.txt
+	@echo "[DONE] Archivo descifrado en $(FILES_DIR)/output_dec.txt"
+
+valgrind_decrypt_afin_mod:
+	@echo "[VALGRIND] Comprobando fugas en AFIN..."
+	$(VALGRIND) $(BIN_AFIN_MOD) -D -m 26 -a 36986419 7 -b 2776385085840833906571070249467114581 -i $(FILES_DIR)/output.enc -o $(FILES_DIR)/output_dec.txt
 	@echo "[DONE] Archivo descifrado en $(FILES_DIR)/output_dec.txt"
 
 # valgrind_euclides: $(BIN_EUC)

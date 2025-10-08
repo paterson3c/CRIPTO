@@ -74,6 +74,13 @@ void encriptar_afin(FILE *in, FILE *out, const mpz_t a, const mpz_t b, const mpz
     mpz_t x, y;
     mpz_inits(x, y, NULL);
 
+    EuclidesResult euc = euclides(a, m);
+
+    if (mpz_cmp_ui(euc.rn, 1) != 0) {
+        fprintf(stderr, "Error: a y M no son coprimos\n");
+        exit(1);
+    }
+
     while ((c = normalizar_char(in)) != EOF) {
         if (c == 0) 
             continue;

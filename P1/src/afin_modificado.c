@@ -1,242 +1,160 @@
-#include "afin_modificado.h"
 #include "euclides.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
+#include <gmp.h>
 
-/**
- * @brief Encripta un archivo usando el cifrado afín por bloques de 2 bytes + permutación.
- *
- * Fórmula de cifrado: E(x) = (a*x + b) mod 65536
- *
- * @param in   Archivo de entrada.
- * @param out  Archivo de salida.
- * @param a    Clave multiplicativa (impar, coprima con 65536).
- * @param b    Clave aditiva.
- * @param seed Semilla para permutación (32 bits).
- */
-void encriptar_afin_modificado(FILE *in, FILE *out, const mpz_t a, const mpz_t b, unsigned int seed) {
-    const int WINDOW = 8; // nº de bloques por ventana
-    uint16_t blocks[WINDOW];
-    int count;
-    mpz_t x, y, m;
-    mpz_inits(x, y, m, NULL);
-    mpz_set_ui(m, 65536);
+#define BLOCK_SIZE 26
 
-    while (1) {
-        // Leer hasta WINDOW bloques de 2 bytes
-        count = 0;
-        for (int i = 0; i < WINDOW; i++) {
-            int c1 = fgetc(in);
-            int c2 = fgetc(in);
-            if (c1 == EOF) break;
-            if (c2 == EOF) c2 = 0x00; // padding
-            blocks[i] = ((uint16_t)c1 << 8) | (uint16_t)c2;
-            count++;
-        }
-        if (count == 0) break;
+/* ---------- Conversiones base-26 ---------- */
 
-        // Cifrar cada bloque
-        for (int i = 0; i < count; i++) {
-            mpz_set_ui(x, blocks[i]);
-            mpz_mul(y, a, x);
-            mpz_add(y, y, b);
-            mpz_mod(y, y, m);
-            blocks[i] = (uint16_t)mpz_get_ui(y);
-        }
-
-        // Permutar (Fisher-Yates con LCG)
-        unsigned int state = seed;
-        for (int i = count - 1; i > 0; i--) {
-            state = state * 1664525u + 1013904223u;
-            int j = state % (i + 1);
-            uint16_t tmp = blocks[i];
-            blocks[i] = blocks[j];
-            blocks[j] = tmp;
-        }
-
-        // Escribir bloques cifrados
-        for (int i = 0; i < count; i++) {
-            fputc((blocks[i] >> 8) & 0xFF, out);
-            fputc(blocks[i] & 0xFF, out);
-        }
+void block_to_mpz(const char *block, int L, mpz_t x) {
+    mpz_set_ui(x, 0);
+    for (int i = 0; i < L; ++i) {
+        int d = block[i] - 'A';
+        if (d < 0 || d > 25) d = 0; // saneo
+        mpz_mul_ui(x, x, 26);
+        mpz_add_ui(x, x, (unsigned)d);
     }
-
-    mpz_clears(x, y, m, NULL);
 }
 
-/**
- * @brief Descifra un archivo usando el cifrado afín por bloques de 2 bytes + permutación.
- *
- * Fórmula de descifrado: D(y) = a^{-1} * (y - b) mod 65536
- *
- * @param in   Archivo de entrada.
- * @param out  Archivo de salida.
- * @param a    Clave multiplicativa (impar, coprima con 65536).
- * @param b    Clave aditiva.
- * @param seed Semilla para permutación (32 bits).
- */
-void decriptar_afin_modificado(FILE *in, FILE *out, const mpz_t a, const mpz_t b, unsigned int seed) {
-    const int WINDOW = 8;
-    uint16_t blocks[WINDOW];
-    int count;
-    mpz_t x, y, m, ainv, tmp;
-    mpz_inits(x, y, m, ainv, tmp, NULL);
-    mpz_set_ui(m, 65536);
+void mpz_to_block(const mpz_t x_in, int L, char *block_out) {
+    mpz_t x, q, r;
+    mpz_inits(x, q, r, NULL);
+    mpz_set(x, x_in);
 
-    // Calcular inverso de a mod 65536
-    ExtendedEuclidesResult ext = extended_euclides(a, m);
+    for (int i = 0; i < L; ++i) block_out[i] = 'A'; // padding por defecto
+
+    for (int pos = L - 1; pos >= 0 && mpz_sgn(x) > 0; --pos) {
+        mpz_tdiv_qr_ui(q, r, x, 26);
+        unsigned long rem = mpz_get_ui(r);
+        block_out[pos] = (char)('A' + rem);
+        mpz_set(x, q);
+    }
+
+    mpz_clears(x, q, r, NULL);
+}
+
+void compute_modulus(int L, mpz_t M) {
+    mpz_ui_pow_ui(M, 26, (unsigned long)L);
+}
+
+/* ---------- Cifrar / Descifrar por bloques ---------- */
+
+void encriptar_afin_bloques(FILE *in, FILE *out,
+                            const mpz_t a, const mpz_t b, const mpz_t M) {
+    char bloque[BLOCK_SIZE];
+    size_t count = 0;
+    mpz_t x, y;
+    mpz_inits(x, y, NULL);
+
+    ExtendedEuclidesResult ext = extended_euclides(a, M);
     if (mpz_cmp_ui(ext.mcd, 1) != 0) {
-        fprintf(stderr, "Error: a y m no son coprimos.\n");
+        fprintf(stderr, "No existe inverso de a mod M.\n");
         mpz_clears(ext.mcd, ext.s, ext.t, NULL);
-        mpz_clears(x, y, m, ainv, tmp, NULL);
         return;
     }
-    mpz_mod(ainv, ext.s, m);
 
-    while (1) {
-        // Leer hasta WINDOW bloques
-        count = 0;
-        for (int i = 0; i < WINDOW; i++) {
-            int c1 = fgetc(in);
-            int c2 = fgetc(in);
-            if (c1 == EOF) break;
-            if (c2 == EOF) c2 = 0x00;
-            blocks[i] = ((uint16_t)c1 << 8) | (uint16_t)c2;
-            count++;
-        }
-        if (count == 0) break;
+    int c;
+    while ((c = fgetc(in)) != EOF) {
+        if (c >= 'a' && c <= 'z') c -= 32; // minúscula → mayúscula
+        if (c < 'A' || c > 'Z') continue;  // ignora no letras
+        bloque[count++] = (char)c;
 
-        // Regenerar la permutación y guardarla
-        unsigned int state = seed;
-        int perm[WINDOW];
-        for (int i = 0; i < count; i++) perm[i] = i;
-        for (int i = count - 1; i > 0; i--) {
-            state = state * 1664525u + 1013904223u;
-            int j = state % (i + 1);
-            int tmpi = perm[i];
-            perm[i] = perm[j];
-            perm[j] = tmpi;
-        }
-        // Inversa de la permutación
-        uint16_t inv_blocks[WINDOW];
-        for (int i = 0; i < count; i++) {
-            inv_blocks[perm[i]] = blocks[i];
-        }
-        memcpy(blocks, inv_blocks, count * sizeof(uint16_t));
-
-        // Descifrar cada bloque
-        for (int i = 0; i < count; i++) {
-            mpz_set_ui(y, blocks[i]);
-            mpz_sub(tmp, y, b);
-            mpz_mod(tmp, tmp, m);
-            mpz_mul(x, ainv, tmp);
-            mpz_mod(x, x, m);
-            blocks[i] = (uint16_t)mpz_get_ui(x);
-        }
-
-        // Escribir bloques descifrados
-        for (int i = 0; i < count; i++) {
-            fputc((blocks[i] >> 8) & 0xFF, out);
-            fputc(blocks[i] & 0xFF, out);
+        if (count == BLOCK_SIZE) {
+            block_to_mpz(bloque, BLOCK_SIZE, x);
+            mpz_mul(y, a, x);
+            mpz_add(y, y, b);
+            mpz_mod(y, y, M);
+            mpz_to_block(y, BLOCK_SIZE, bloque);
+            fwrite(bloque, sizeof(char), BLOCK_SIZE, out);
+            count = 0;
         }
     }
 
-    mpz_clears(x, y, m, ainv, tmp, NULL);
+    // último bloque (rellenar con 'A')
+    if (count > 0) {
+        for (size_t i = count; i < BLOCK_SIZE; ++i)
+            bloque[i] = 'A';
+        block_to_mpz(bloque, BLOCK_SIZE, x);
+        mpz_mul(y, a, x);
+        mpz_add(y, y, b);
+        mpz_mod(y, y, M);
+        mpz_to_block(y, BLOCK_SIZE, bloque);
+        fwrite(bloque, sizeof(char), BLOCK_SIZE, out);
+    }
+
+    mpz_clears(x, y, NULL);
+}
+
+void decriptar_afin_bloques(FILE *in, FILE *out,
+                            const mpz_t a, const mpz_t b, const mpz_t M) {
+    ExtendedEuclidesResult ext = extended_euclides(a, M);
+    if (mpz_cmp_ui(ext.mcd, 1) != 0) {
+        fprintf(stderr, "No existe inverso de a mod M.\n");
+        mpz_clears(ext.mcd, ext.s, ext.t, NULL);
+        return;
+    }
+
+    mpz_t a_inv, x, y, tmp;
+    mpz_inits(a_inv, x, y, tmp, NULL);
+    mpz_mod(a_inv, ext.s, M);
+
+    char bloque[BLOCK_SIZE];
+    while (fread(bloque, sizeof(char), BLOCK_SIZE, in) == BLOCK_SIZE) {
+        block_to_mpz(bloque, BLOCK_SIZE, y);
+        mpz_sub(tmp, y, b);
+        mpz_mod(tmp, tmp, M);
+        mpz_mul(x, a_inv, tmp);
+        mpz_mod(x, x, M);
+        mpz_to_block(x, BLOCK_SIZE, bloque);
+        fwrite(bloque, sizeof(char), BLOCK_SIZE, out);
+    }
+
+    mpz_clears(a_inv, x, y, tmp, NULL);
     mpz_clears(ext.mcd, ext.s, ext.t, NULL);
 }
 
+/* ---------- Programa principal ---------- */
 
-/**
- * @brief Main function to test the encryption and decryption functions.
- * @param argc Argument count.
- * @param argv Argument vector.
- * @return Exit status.
- * -C: encrypt
- * -D: decrypt
- * -m: modulo
- * -a: multiplicative key
- * -b: additive key
- * -i: input file (default: stdin)
- * -o: output file (default: stdout)
- */
 int main(int argc, char *argv[]) {
-    if (argc < 8) {  
-        fprintf(stderr, "Uso: %s -C|-D -m <modulo> -a <clave_mult> -b <clave_add> [-i <input>] [-o <output>]\n", argv[0]);
+    if (argc < 8) {
+        fprintf(stderr, "Uso: %s -C|-D -a <clave_mult> -b <clave_add> [-i in] [-o out]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    int int_m = 0, int_a = 0, int_b = 0;
     int mode = -1;
-    const char *input_path = NULL;
-    const char *output_path = NULL;
+    const char *input_path = NULL, *output_path = NULL;
+    char *a_str = NULL, *b_str = NULL;
 
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-C") == 0) {
-            mode = CIPHER_AFIN;
-        } else if (strcmp(argv[i], "-D") == 0) {
-            mode = DECIPHER_AFIN;
-        } else if (strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
-            int_m = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "-a") == 0 && i + 1 < argc) {
-            int_a = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "-b") == 0 && i + 1 < argc) {
-            int_b = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "-i") == 0 && i + 1 < argc) {
-            input_path = argv[++i];
-        } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
-            output_path = argv[++i];
-        } else {
-            fprintf(stderr, "Argumento no reconocido: %s\n", argv[i]);
-            return EXIT_FAILURE;
-        }
+    for (int i = 1; i < argc; ++i) {
+        if (!strcmp(argv[i], "-C")) mode = 0;
+        else if (!strcmp(argv[i], "-D")) mode = 1;
+        else if (!strcmp(argv[i], "-a") && i + 1 < argc) a_str = argv[++i];
+        else if (!strcmp(argv[i], "-b") && i + 1 < argc) b_str = argv[++i];
+        else if (!strcmp(argv[i], "-i") && i + 1 < argc) input_path = argv[++i];
+        else if (!strcmp(argv[i], "-o") && i + 1 < argc) output_path = argv[++i];
     }
 
-    // Inicializar GMP
-    mpz_t m, a, b;
-    mpz_inits(m, a, b, NULL);
+    FILE *in = input_path ? fopen(input_path, "r") : stdin;
+    FILE *out = output_path ? fopen(output_path, "w") : stdout;
+    if (!in || !out) { perror("fopen"); return EXIT_FAILURE; }
 
-    // Asignar valores de los int a mpz_t
-    mpz_set_ui(m, int_m);
-    mpz_set_ui(a, int_a);
-    mpz_set_ui(b, int_b);
+    mpz_t a, b, M;
+    mpz_inits(a, b, M, NULL);
+    mpz_set_str(a, a_str, 10);
+    mpz_set_str(b, b_str, 10);
+    compute_modulus(BLOCK_SIZE, M);
 
-    // Abrir ficheros
-    FILE *in = stdin;
-    FILE *out = stdout;
-    if (input_path) {
-        in = fopen(input_path, "r");
-        if (!in) {
-            perror("Error abriendo input");
-            return EXIT_FAILURE;
-        }
-    }
-    if (output_path) {
-        out = fopen(output_path, "w");
-        if (!out) {
-            perror("Error abriendo output");
-            if (in != stdin) fclose(in);
-            return EXIT_FAILURE;
-        }
-    }
+    if (mode == 0)
+        encriptar_afin_bloques(in, out, a, b, M);
+    else if (mode == 1)
+        decriptar_afin_bloques(in, out, a, b, M);
+    else
+        fprintf(stderr, "Debes indicar -C o -D.\n");
 
-    // Ejecutar cifrado/descifrado
-    if (mode == CIPHER_AFIN) {
-        encriptar_afin_modificado(in, out, a, b, m);
-    } else if (mode == DECIPHER_AFIN) {
-        decriptar_afin_modificado(in, out, a, b, m);
-    } else {
-        fprintf(stderr, "Debes especificar -C (cifrar) o -D (descifrar).\n");
-        return EXIT_FAILURE;
-    }
-
-    // Cerrar ficheros
+    mpz_clears(a, b, M, NULL);
     if (in != stdin) fclose(in);
     if (out != stdout) fclose(out);
-
-    // Liberar GMP
-    mpz_clears(m, a, b, NULL);
-
     return EXIT_SUCCESS;
 }
