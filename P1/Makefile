@@ -125,11 +125,10 @@ decrypt_mod:
 # CRIFRADO VIGENERE
 encrypt_vigenere:
 	@mkdir -p $(FILES_DIR)
-	$(BIN_VIGENERE) -C -k CLAVE -i $(FILES_DIR)/quijote.txt -o $(FILES_DIR)/output_vig.enc
+	$(BIN_VIGENERE) -C -k CLAVE -i $(FILES_DIR)/quijote_mitad.txt -o $(FILES_DIR)/output_vig.enc
 	@echo "[DONE] Archivo cifrado en $(FILES_DIR)/output_vig.enc"
 
 # DESCRIFRADO VIGENERE
-
 decrypt_vigenere:
 	@mkdir -p $(FILES_DIR)
 	$(BIN_VIGENERE) -D -k CLAVE -i $(FILES_DIR)/output_vig.enc -o $(FILES_DIR)/output_vig_dec.txt
