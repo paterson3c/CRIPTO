@@ -40,7 +40,7 @@ OBJ_CRIPTO_VIG := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_CRIPTO_VIG))
 # ===============================
 
 # Por defecto compila todo
-all: $(BIN_AFIN) $(BIN_AFIN_MOD) #$(BIN_EUC) $(BIN_VIGENERE) $(BIN_CRIPTO_VIG)
+all: $(BIN_AFIN) $(BIN_AFIN_MOD) $(BIN_VIGENERE) $(BIN_CRIPTO_VIG) #$(BIN_EUC) 
 
 # Ejecutable AFIN clásico
 $(BIN_AFIN): $(OBJ_AFIN)
@@ -126,13 +126,13 @@ decrypt_afin_mod:
 # CRIFRADO VIGENERE
 encrypt_vigenere:
 	@mkdir -p $(FILES_DIR)
-	$(BIN_VIGENERE) -C -k CLAVE -i $(FILES_DIR)/quijote_mitad.txt -o $(FILES_DIR)/output_vig.enc
-	@echo "[DONE] Archivo cifrado en $(FILES_DIR)/output_vig.enc"
+	$(BIN_VIGENERE) -C -k ANTONIODETRIANA -i $(FILES_DIR)/quijote_mitad.txt -o $(FILES_DIR)/output_vig.enc
+	@echo "[DONE] Archivo cifradA -i o en $(FILES_DIR)/output_vig.enc"
 
 # DESCRIFRADO VIGENERE
 decrypt_vigenere:
 	@mkdir -p $(FILES_DIR)
-	$(BIN_VIGENERE) -D -k CLAVE -i $(FILES_DIR)/output_vig.enc -o $(FILES_DIR)/output_vig_dec.txt
+	$(BIN_VIGENERE) -D -k ANTONIODETRIANA -i $(FILES_DIR)/output_vig.enc -o $(FILES_DIR)/output_vig_dec.txt
 	@echo "[DONE] Archivo descifrado en $(FILES_DIR)/output_vig_dec.txt"
 
 # CRIPTOANÁLISIS VIGENERE (test de Kasiski)
@@ -144,7 +144,7 @@ analisis_vigenere_kasiski:
 # CRIPTOANÁLISIS VIGENERE (índice de coincidencia)
 analisis_vigenere_ic:
 	@mkdir -p $(FILES_DIR)
-	$(BIN_CRIPTO_VIG) -ic 5 $(FILES_DIR)/output_vig.enc
+	$(BIN_CRIPTO_VIG) -ic -i $(FILES_DIR)/output_vig.enc
 	@echo "[DONE] Análisis de texto cifrado completado"
 
 # ===============================

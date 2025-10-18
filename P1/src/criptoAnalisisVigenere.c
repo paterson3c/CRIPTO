@@ -6,7 +6,7 @@
 #define MAX_TEXT 1000000
 #define ALPHABET 26
 
-#define MAX_K_CAND 40 // Número máximo de candidatos a longitud de clave (2..40)
+#define MAX_K_CAND 30 // Número máximo de candidatos a longitud de clave (2..40)
 #define MIN_DIST 20   // Distancia mínima entre repeticiones a considerar
 #define NGRAM 3       // Tamaño del n-grama
 #define A 'A'         // Valor ASCII base para las letras mayúsculas
@@ -135,13 +135,6 @@ void kasiski(const char *text, int len)
 
                 // Calcula el MCD acumulado del grupo
                 g = (g == 0) ? d : mcd(g, d);
-
-                // // Vota por todos los divisores razonables de esta distancia
-                // for (int k = 2; k <= MAX_K_CAND; k++)
-                // {
-                //     if (d % k == 0)
-                //         votes[k]++;
-                // }
             }
 
             // Filtro adicional: solo sumar votos para MCDs razonables (entre 2 y 20)
@@ -186,26 +179,142 @@ void kasiski(const char *text, int len)
     free(arr);
 }
 
-// Índice de coincidencia para longitud n
-void ic(const char *text, int len, int n)
-{
-    printf("=== Índice de Coincidencia para n=%d ===\n", n);
-    for (int k = 0; k < n; k++)
-    {
-        int freq[ALPHABET] = {0};
-        int count = 0;
-        for (int i = k; i < len; i += n)
-        {
-            freq[text[i] - A]++;
-            count++;
+// ===== Ajustes robustos para ataque por IC + M(k) =====
+// - Alfabeto de 26 letras (A-Z). Ñ y no-letras NO se cifran.
+// - Para formar las subcolumnas usamos un contador que avanza SOLO en A-Z,
+//   así las columnas quedan alineadas exactamente como en tu vigenere.c.
+
+// --- Frecuencias ES/EN (porcentajes de la práctica) ---
+static const double FREQ_ES_PCT[26] = {
+    11.96,0.92,2.92,6.87,16.78,0.52,0.73,0.89,4.15,0.30,0.00,8.37,2.12,7.01,
+    8.69,2.77,1.53,4.94,7.88,3.31,4.80,0.39,0.00,0.06,1.54,0.15
+};
+static const double FREQ_EN_PCT[26] = {
+    8.04,1.54,3.06,3.99,12.51,2.30,1.96,5.49,7.26,0.16,0.67,4.14,2.53,7.09,
+    7.60,2.00,0.11,6.12,6.54,9.25,2.71,0.99,1.92,0.19,1.73,0.19
+};
+
+static inline int is_letter26(char c) {
+    // A-Z sin Ñ (tu cifrado solo avanza en estas)
+    return (c >= 'A' && c <= 'Z' && c != 'Ñ');
+}
+
+static double load_language_probs(const char *lang, double P[26]) {
+    const double *src = (lang && (strcmp(lang,"en")==0 || strcmp(lang,"EN")==0))
+                        ? FREQ_EN_PCT : FREQ_ES_PCT; // por defecto ES
+    double sum = 0.0, ic = 0.0;
+    for (int i = 0; i < 26; ++i) sum += src[i];
+    if (sum <= 0.0) sum = 1.0;
+    for (int i = 0; i < 26; ++i) {
+        P[i] = src[i] / sum;      // prob idioma
+        ic  += P[i] * P[i];       // IC teórico ΣP_i^2
+    }
+    return ic;
+}
+
+// Recolecta frecuencias de la subcolumna k (0..n-1) para una clave de longitud n,
+// recorriendo TODO el texto pero incrementando el índice de columna SOLO en A-Z (sin Ñ).
+// Devuelve N (longitud de la subcolumna).
+static int column_freq(const char *text, int len, int n, int k, int freq[26]) {
+    memset(freq, 0, 26 * sizeof(int));
+    int col_idx = 0; // avanza solo cuando vemos A-Z (sin Ñ)
+    int N = 0;
+    for (int i = 0; i < len; ++i) {
+        char c = text[i];
+        if (!is_letter26(c)) continue;      // ignoramos Ñ y no-letras (no avanzan clave)
+        if ((col_idx % n) == k) {
+            freq[c - 'A']++;
+            N++;
         }
-        double ic_val = 0.0;
-        for (int j = 0; j < ALPHABET; j++)
-        {
-            ic_val += freq[j] * (freq[j] - 1);
+        col_idx++;
+    }
+    return N;
+}
+
+// IC medio para un n dado usando las subcolumnas "reales" (con la lógica anterior)
+static double ic_for_n(const char *text, int len, int n) {
+    double sum_ic = 0.0;
+    int cols = 0;
+    for (int k = 0; k < n; ++k) {
+        int f[26]; int N = column_freq(text, len, n, k, f);
+        if (N < 2) { cols++; continue; }
+        long long num = 0;
+        for (int j = 0; j < 26; ++j) num += 1LL * f[j] * (f[j] - 1);
+        long long den = 1LL * N * (N - 1);
+        sum_ic += (den ? (double)num / (double)den : 0.0);
+        cols++;
+    }
+    return (cols ? sum_ic / cols : 0.0);
+}
+
+// M(k) = Σ_j P_j * ( f_{j+k} / ℓ )
+// **ℓ es la longitud de ESA subcolumna** (errata corregida: no es ℓ/n).
+// Recordatorio: como C = P + K, la subclave de CIFRADO coincide con el k que MAXIMIZA M(k)
+// cuando comparamos P_j con la distribución del cifrado desplazada +k.
+static int best_shift_M_for_column(const char *text, int len, int n, int kcol, const double P[26]) {
+    int f[26]; int N = column_freq(text, len, n, kcol, f);
+    if (N == 0) return 0;
+    int best_k = 0;
+    double best_s = -1e300;
+    for (int k = 0; k < 26; ++k) {
+        double s = 0.0;
+        for (int j = 0; j < 26; ++j) {
+            int idx = (j + k) % 26;         // f_{j+k}
+            s += P[j] * ((double)f[idx] / (double)N);  // dividir por ℓ = N  ← errata arreglada
         }
-        ic_val /= (double)(count * (count - 1));
-        printf("Subcadena %d: IC = %.3f\n", k + 1, ic_val);
+        if (s > best_s + 1e-12 || (fabs(s - best_s) <= 1e-12 && k < best_k)) {
+            best_s = s; best_k = k;
+        }
+    }
+    return best_k; // letra de CIFRADO = 'A' + best_k
+}
+
+void vigenere_ic_attack(const char *text, int len, int max_k, const char *lang, char *out_key) {
+    double P[26];
+    double ic_lang = load_language_probs(lang, P);
+    const double ic_uniform = 1.0 / 26.0;
+
+    printf("=== Ataque Vigenere por IC (%s) ===\n", (lang && strcmp(lang,"en")==0) ? "EN" : "ES");
+    printf("IC(teorico idioma)=%.5f, IC(aleatorio)=%.5f\n\n", ic_lang, ic_uniform);
+
+    if (max_k < 1) max_k = 1;
+    if (max_k > 60) max_k = 60;
+
+    // 1) Estimar n por IC medio (con columnas reales que saltan Ñ y no-letras)
+    int best_n = 1; double best_dist = 1e300; const double EPS = 5e-5;
+    printf("IC medio por n:\n");
+    for (int n = 1; n <= max_k; ++n) {
+        double avg_ic = ic_for_n(text, len, n);
+        double dist   = fabs(avg_ic - ic_lang);
+        printf("  n=%2d -> ICmedio=%.5f (dist=%.5f)\n", n, avg_ic, dist);
+        if (dist + EPS < best_dist || (fabs(dist - best_dist) <= EPS && n < best_n)) {
+            best_dist = dist; best_n = n;
+        }
+    }
+
+    printf("\n>>> Estimación de longitud de clave: n = %d\n", best_n);
+
+    // 2) Subclaves con M(k) correcto (divide por ℓ y usa f_{j+k})
+    for (int i = 0; i < best_n; ++i) {
+        int k = best_shift_M_for_column(text, len, best_n, i, P);
+        out_key[i] = (char)('A' + k);  // clave de CIFRADO (tu vigenere.c usa C = P + K)
+        printf("  Subclave[%d] = %c (k=%d)\n", i+1, out_key[i], k);
+    }
+    out_key[best_n] = '\0';
+
+    // 3) Reducir al periodo mínimo si se repite patrón
+    int period = best_n;
+    for (int d = 1; d <= best_n/2; ++d) {
+        if (best_n % d) continue;
+        int ok = 1;
+        for (int i = d; i < best_n; ++i) if (out_key[i] != out_key[i % d]) { ok = 0; break; }
+        if (ok) { period = d; break; }
+    }
+    if (period < best_n) {
+        out_key[period] = '\0';
+        printf(">>> Clave reducida al periodo detectado: %s (periodo %d)\n", out_key, period);
+    } else {
+        printf(">>> Clave estimada: %s\n", out_key);
     }
 }
 
@@ -228,7 +337,6 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[i], "-ic") == 0 && i + 1 < argc)
         {
             mode = 2;
-            n = atoi(argv[++i]);
         }
         else if (strcmp(argv[i], "-i") == 0 && i + 1 < argc)
             filein = argv[++i];
@@ -242,11 +350,12 @@ int main(int argc, char *argv[])
 
     char *text = malloc(MAX_TEXT);
     int len = load_text(filein, text);
-
+    char clave[40];
     if (mode == 1)
         kasiski(text, len);
     else if (mode == 2)
-        ic(text, len, n);
+
+        vigenere_ic_attack(text, len, MAX_K_CAND, "es", clave);
 
     free(text);
     return 0;
